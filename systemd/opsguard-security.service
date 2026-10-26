@@ -1,0 +1,7 @@
+[Unit]
+Description=opsguard SSH security scan
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/opsguard security
+Nice=10

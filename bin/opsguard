@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# opsguard - server health checks, backups, security scanning and alerts.
+set -uo pipefail
+
+OPSGUARD_VERSION="1.0.0"
+OPSGUARD_HOME="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+# Config lookup order: $OPSGUARD_CONFIG, /etc/opsguard, then the copy next to the code.
+if [[ -n "${OPSGUARD_CONFIG:-}" ]]; then
+  CONFIG_FILE="$OPSGUARD_CONFIG"
+elif [[ -f /etc/opsguard/opsguard.conf ]]; then
+  CONFIG_FILE=/etc/opsguard/opsguard.conf
+else
+  CONFIG_FILE="$OPSGUARD_HOME/opsguard.conf"
+fi
+
+if [[ ! -r "$CONFIG_FILE" ]]; then
+  echo "opsguard: cannot read config file $CONFIG_FILE (try sudo)" >&2
+  exit 2
+fi
+# shellcheck source=/dev/null
+source "$CONFIG_FILE"
+
+for lib in common notify health backup security report; do
+  # shellcheck source=/dev/null
+  source "$OPSGUARD_HOME/lib/$lib.sh"
+done
+
+usage() {
+  cat <<EOF
+opsguard $OPSGUARD_VERSION - server monitoring, backups and alerts
+
+Usage: opsguard <command>
+
+Commands:
+  check         Check CPU, memory, disk, services and backup age; alert on problems
+  status        Same checks, but only print the results (no alerts)
+  backup        Back up files and databases, then apply retention
+  backups       List existing backups
+  verify [NAME] Verify a backup's checksums (default: newest daily backup)
+  security      Scan SSH logs for brute-force attempts and root logins
+  report        Build the daily HTML report and send it
+  test-alert    Send a test message to every configured channel
+  version       Print the version
+
+Config: $CONFIG_FILE
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  case "$cmd" in
+    check)      with_lock check run_health_checks ;;
+    status)     ALERTS_ENABLED=no run_health_checks ;;
+    backup)     with_lock backup run_backup ;;
+    backups)    list_backups ;;
+    verify)     verify_backup "${2:-}" ;;
+    security)   with_lock security run_security_scan ;;
+    report)     with_lock report run_report ;;
+    test-alert) notify INFO "Test alert" "If you can read this, opsguard alerts are working on $HOST_LABEL." ;;
+    version)    echo "opsguard $OPSGUARD_VERSION" ;;
+    -h|--help|help|"") usage ;;
+    *) echo "opsguard: unknown command '$cmd'" >&2; usage >&2; exit 2 ;;
+  esac
+}
+
+main "$@"

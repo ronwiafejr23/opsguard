@@ -1,0 +1,9 @@
+[Unit]
+Description=opsguard health check (CPU, memory, disk, services)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/opsguard check
+# Exit code 1 means "problems found and alerted", not a crash.
+SuccessExitStatus=1
+Nice=10
